@@ -10,8 +10,9 @@ B = 1
 H = 1
 N = int(sys.argv[1])
 D = int(sys.argv[2])
+prefix = int(sys.argv[3])
 
-TESTNAME = sys.argv[3] if len(sys.argv) > 3 else 'randn'
+TESTNAME = sys.argv[4] if len(sys.argv) > 4 else 'randn'
 
 if TESTNAME == 'ones':
     q = torch.ones((B, H, N, D), dtype=torch.bfloat16, device='cuda').requires_grad_()
@@ -46,7 +47,14 @@ l_vec = l_vec.sum(dim=-1, keepdim=True)
 
 l_vec = max_vec + torch.log(l_vec)
 
-o = torch.nn.functional.scaled_dot_product_attention(q, k, v, is_causal=True)
+attn_mask = torch.triu(torch.ones(k.shape[2], k.shape[2]), diagonal=1)
+for col in range(0, prefix):
+    for row in range(0, attn_mask.size(dim=1)):
+        attn_mask[row][col] = 0
+print(attn_mask)
+attn_mask = attn_mask.to('cuda').bool().unsqueeze(0).unsqueeze(0).expand(B, H, -1, -1)
+attn_mask = attn_mask.masked_fill(attn_mask, float('-inf'))
+o = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
 o.backward(grad_output)
 q_grad = q.grad
 k_grad = k.grad
@@ -55,7 +63,7 @@ v_grad = v.grad
 d_vec = torch.mul(o, grad_output)
 d_vec = d_vec.sum(dim=-1, keepdim=True)
 
-with open(f'{TESTNAME}_causal_{N}N_{D}D.txt', 'w') as f:
+with open(f'{TESTNAME}_causal_{N}N_{D}D_{prefix}prefix.txt', 'w') as f:
     # inputs
     qf = q.to(torch.float32).flatten().detach().cpu().numpy()
     kf = k.to(torch.float32).flatten().detach().cpu().numpy()
@@ -137,7 +145,7 @@ with torch.backends.cuda.sdp_kernel(
 
     # warmup
     for _ in range(10):
-        o = torch.nn.functional.scaled_dot_product_attention(q, k, v, is_causal=True)
+        o = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
     
     # Prepare for timing
     start_events = [torch.cuda.Event(enable_timing=True) for _ in range(30)]
@@ -148,7 +156,7 @@ with torch.backends.cuda.sdp_kernel(
     for i in range(30):
         start_events[i].record()
         torch.cuda.synchronize()
-        o = torch.nn.functional.scaled_dot_product_attention(q, k, v, is_causal=True)
+        o = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
         torch.cuda.synchronize()
         end_events[i].record()
     
@@ -178,7 +186,7 @@ with torch.backends.cuda.sdp_kernel(
         v.grad = None
         grad_output.grad = None
         
-        o = torch.nn.functional.scaled_dot_product_attention(q, k, v, is_causal=True)
+        o = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
         o.backward(grad_output)
     
     
@@ -194,7 +202,7 @@ with torch.backends.cuda.sdp_kernel(
         v.grad = None
         grad_output.grad = None
         
-        o = torch.nn.functional.scaled_dot_product_attention(q, k, v, is_causal=True)
+        o = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
         
         start_events[i].record()
         torch.cuda.synchronize()
