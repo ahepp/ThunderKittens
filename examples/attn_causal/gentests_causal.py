@@ -82,31 +82,40 @@ with open(f'{TESTNAME}_causal_{N}N_{D}D_{prefix}prefix.txt', 'w') as f:
     
     for i in trange(B*H*N*D):
         f.write(repr(qf[i]))
-        f.write(' ')
+        f.write('\n')
+    f.write('\n')
     for i in trange(B*H*N*D):
         f.write(repr(kf[i]))
-        f.write(' ')
+        f.write('\n')
+    f.write('\n')
     for i in trange(B*H*N*D):
         f.write(repr(vf[i]))
-        f.write(' ')
+        f.write('\n')
+    f.write('\n')
     for i in trange(B*H*N*D):
         f.write(repr(of[i]))
-        f.write(' ')
+        f.write('\n')
+    f.write('\n')
     for i in trange(B*H*N):
         f.write(repr(l_vecf[i]))
-        f.write(' ')
+        f.write('\n')
+    f.write('\n')
     for i in trange(B*H*N*D):
         f.write(repr(grad_outputf[i]))
-        f.write(' ')
+        f.write('\n')
+    f.write('\n')
     for i in trange(B*H*N*D):
         f.write(repr(q_grad[i]))
-        f.write(' ')
+        f.write('\n')
+    f.write('\n')
     for i in trange(B*H*N*D):
         f.write(repr(k_grad[i]))
-        f.write(' ')
+        f.write('\n')
+    f.write('\n')
     for i in trange(B*H*N*D):
         f.write(repr(v_grad[i]))
-        f.write(' ')
+        f.write('\n')
+    f.write('\n')
         
 
 print(f'Run the harness like `cat {TESTNAME}.txt | ./harness`')
