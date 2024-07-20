@@ -122,8 +122,8 @@ D = int(sys.argv[2])
 print("-" * 60)
 print(f'Timing forward pass for for B={B}, H={H}, N={N}, D={D}')
 with torch.backends.cuda.sdp_kernel(
-    enable_flash=True, 
-    enable_math=False, 
+    enable_flash=False,
+    enable_math=True,
     enable_mem_efficient=False
 ):
     q = torch.randn((B, H, N, D), dtype=torch.float16, device='cuda')
@@ -133,6 +133,7 @@ with torch.backends.cuda.sdp_kernel(
     q.grad = None
     k.grad = None
     v.grad = None
+
 
     # warmup
     for _ in range(10):
@@ -160,8 +161,8 @@ print(f'Average efficiency for forward pass in TFLOPS: {efficiency(flops(B, N, D
 print("-" * 60)
 print(f'Timing backward pass for for B={B}, H={H}, N={N}, D={D}')
 with torch.backends.cuda.sdp_kernel(
-    enable_flash=True, 
-    enable_math=False, 
+    enable_flash=False,
+    enable_math=True,
     enable_mem_efficient=False
 ):
     q = torch.randn((B, H, N, D), dtype=torch.float16, device='cuda').requires_grad_()
