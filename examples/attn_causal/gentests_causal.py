@@ -15,21 +15,21 @@ prefix = int(sys.argv[3])
 TESTNAME = sys.argv[4] if len(sys.argv) > 4 else 'randn'
 
 if TESTNAME == 'ones':
-    q = torch.ones((B, H, N, D), dtype=torch.bfloat16, device='cuda').requires_grad_()
-    k = torch.ones((B, H, N, D), dtype=torch.bfloat16, device='cuda').requires_grad_()
-    v = torch.ones((B, H, N, D), dtype=torch.bfloat16, device='cuda').requires_grad_()
-    grad_output = torch.ones((B, H, N, D), dtype=torch.bfloat16, device='cuda')
+    q = torch.ones((B, H, N, D), dtype=torch.bfloat16).requires_grad_()
+    k = torch.ones((B, H, N, D), dtype=torch.bfloat16).requires_grad_()
+    v = torch.ones((B, H, N, D), dtype=torch.bfloat16).requires_grad_()
+    grad_output = torch.ones((B, H, N, D), dtype=torch.bfloat16)
 elif TESTNAME == 'randn':
     torch.random.manual_seed(42)
-    q = torch.randn((B, H, N, D), dtype=torch.bfloat16, device='cuda').requires_grad_()
-    k = torch.randn((B, H, N, D), dtype=torch.bfloat16, device='cuda').requires_grad_()
-    v = torch.randn((B, H, N, D), dtype=torch.bfloat16, device='cuda').requires_grad_()
-    grad_output = torch.randn((B, H, N, D), dtype=torch.bfloat16, device='cuda')
+    q = torch.randn((B, H, N, D), dtype=torch.bfloat16).requires_grad_()
+    k = torch.randn((B, H, N, D), dtype=torch.bfloat16).requires_grad_()
+    v = torch.randn((B, H, N, D), dtype=torch.bfloat16).requires_grad_()
+    grad_output = torch.randn((B, H, N, D), dtype=torch.bfloat16)
 elif TESTNAME == 'v_orientation':
-    q = torch.ones((B, H, N, D), dtype=torch.bfloat16, device='cuda').requires_grad_()
-    k = torch.ones((B, H, N, D), dtype=torch.bfloat16, device='cuda').requires_grad_()
-    v = (torch.arange(D, dtype=torch.bfloat16, device='cuda')/D).reshape((1,1,1,-1)).repeat(B, H, N, 1).requires_grad_()
-    grad_output = torch.ones((B, H, N, D), dtype=torch.bfloat16, device='cuda')
+    q = torch.ones((B, H, N, D), dtype=torch.bfloat16).requires_grad_()
+    k = torch.ones((B, H, N, D), dtype=torch.bfloat16).requires_grad_()
+    v = (torch.arange(D, dtype=torch.bfloat16)/D).reshape((1,1,1,-1)).repeat(B, H, N, 1).requires_grad_()
+    grad_output = torch.ones((B, H, N, D), dtype=torch.bfloat16)
 else:
     print('Invalid test name')
     sys.exit(0)
@@ -37,7 +37,7 @@ else:
 softmax_scale = 1 / math.sqrt(D)
 l_vec = torch.einsum("bhnd,bhmd->bhnm", q.clone(), k.clone()) * softmax_scale
 
-mask = torch.triu(torch.ones(l_vec.shape[2], l_vec.shape[3]), diagonal=1).to('cuda').bool().unsqueeze(0).unsqueeze(0).expand(B, H, -1, -1)
+mask = torch.triu(torch.ones(l_vec.shape[2], l_vec.shape[3]), diagonal=1).bool().unsqueeze(0).unsqueeze(0).expand(B, H, -1, -1)
 l_vec = l_vec.masked_fill(mask, float('-inf'))
 
 max_vec = l_vec.max(dim=-1, keepdim=True).values
@@ -52,7 +52,7 @@ for col in range(0, prefix):
     for row in range(0, attn_mask.size(dim=1)):
         attn_mask[row][col] = 0
 print(attn_mask)
-attn_mask = attn_mask.to('cuda').bool().unsqueeze(0).unsqueeze(0).expand(B, H, -1, -1)
+attn_mask = attn_mask.bool().unsqueeze(0).unsqueeze(0).expand(B, H, -1, -1)
 attn_mask = attn_mask.masked_fill(attn_mask, float('-inf'))
 o = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
 o.backward(grad_output)
@@ -134,9 +134,9 @@ with torch.backends.cuda.sdp_kernel(
     enable_math=True,
     enable_mem_efficient=False
 ):
-    q = torch.randn((B, H, N, D), dtype=torch.float16, device='cuda')
-    k = torch.randn((B, H, N, D), dtype=torch.float16, device='cuda')
-    v = torch.randn((B, H, N, D), dtype=torch.float16, device='cuda')
+    q = torch.randn((B, H, N, D), dtype=torch.float16)
+    k = torch.randn((B, H, N, D), dtype=torch.float16)
+    v = torch.randn((B, H, N, D), dtype=torch.float16)
     
     q.grad = None
     k.grad = None
@@ -154,30 +154,19 @@ with torch.backends.cuda.sdp_kernel(
     # Time the forward pass
 
     for i in range(30):
-        start_events[i].record()
-        torch.cuda.synchronize()
         o = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
-        torch.cuda.synchronize()
-        end_events[i].record()
     
-torch.cuda.synchronize()
-times = [s.elapsed_time(e) for s, e in zip(start_events, end_events)]
-time_us = np.mean(times) * 1000
-print(f'Average time for forward pass in us: {time_us:.2f}')
-print(f'Average efficiency for forward pass in TFLOPS: {efficiency(flops(B, N, D, H, True, "fwd"), time_us):.2f}')
-
-print("-" * 60)
 print(f'Timing backward pass for for B={B}, H={H}, N={N}, D={D}')
 with torch.backends.cuda.sdp_kernel(
     enable_flash=False,
     enable_math=True,
     enable_mem_efficient=False
 ):
-    q = torch.randn((B, H, N, D), dtype=torch.float16, device='cuda').requires_grad_()
-    k = torch.randn((B, H, N, D), dtype=torch.float16, device='cuda').requires_grad_()
-    v = torch.randn((B, H, N, D), dtype=torch.float16, device='cuda').requires_grad_()
+    q = torch.randn((B, H, N, D), dtype=torch.float16).requires_grad_()
+    k = torch.randn((B, H, N, D), dtype=torch.float16).requires_grad_()
+    v = torch.randn((B, H, N, D), dtype=torch.float16).requires_grad_()
     
-    grad_output = torch.randn((B, H, N, D), dtype=torch.float16, device='cuda')
+    grad_output = torch.randn((B, H, N, D), dtype=torch.float16)
     
     # warmup
     for _ in range(10):
@@ -190,10 +179,6 @@ with torch.backends.cuda.sdp_kernel(
         o.backward(grad_output)
     
     
-    # Prepare for timing
-    start_events = [torch.cuda.Event(enable_timing=True) for _ in range(30)]
-    end_events = [torch.cuda.Event(enable_timing=True) for _ in range(30)]
-    
     # Time the backward pass
     
     for i in range(30):
@@ -203,17 +188,3 @@ with torch.backends.cuda.sdp_kernel(
         grad_output.grad = None
         
         o = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
-        
-        start_events[i].record()
-        torch.cuda.synchronize()
-        o.backward(grad_output)
-        torch.cuda.synchronize()
-        end_events[i].record()
-    
-torch.cuda.synchronize()
-times = [s.elapsed_time(e) for s, e in zip(start_events, end_events)]
-time_us = np.mean(times) * 1000
-print(f'Average time for backward pass in us: {time_us:.2f}')
-print(f'Average efficiency for backward pass in TFLOPS: {efficiency(flops(B, N, D, H, True, "bwd"), time_us):.2f}')
-
-print("-" * 60)
