@@ -16,20 +16,21 @@
 using namespace kittens;
 
 template<ducks::rt::row_layout RT>
-__device__ static inline void wg_make_causal(RT &dst, const RT &src, const typename base_types::packing<typename RT::dtype>::unpacked_type &val=0) {
+__device__ static inline void wg_make_causal_w_prefix(RT &dst, const RT &src, int prefix, const typename base_types::packing<typename RT::dtype>::unpacked_type &val=0) {
     const typename RT::dtype packed_val = base_types::packing<typename RT::dtype>::pack(val);
     #pragma unroll
     for(int i = 0; i < dst.height; i++) {
         #pragma unroll
         for(int j = 0; j < dst.width; j++) {
 
-            if(j < ((warpid() % kittens::WARPGROUP_WARPS) * dst.height) + i) { // below the diagonal, copy
+            const int row = (warpid() % kittens::WARPGROUP_WARPS) * dst.height + i;
+            if ((j < row) || (j < prefix)) { // below the diagonal or behind prefix, copy
                 #pragma unroll
                 for(int k = 0; k < dst.packed_per_tile; k++) {
                     dst.tiles[i][j].data[k] = src.tiles[i][j].data[k];
                 }
             }
-            else if(j > ((warpid() % kittens::WARPGROUP_WARPS) * dst.height) + i) { // above the diagonal, zero
+            else if (j > row) { // above the diagonal land after prefix, zero
                 #pragma unroll
                 for(int k = 0; k < dst.packed_per_tile; k++) {
                     dst.tiles[i][j].data[k] = packed_val;
@@ -70,7 +71,7 @@ constexpr int kv_height = 4;
 
 template<int D>
 __global__  __launch_bounds__((NUM_WORKERS)*kittens::WARP_THREADS, 2)
-void fwd_attend_ker_dim(int N, const CUtensorMap* tma_q, const CUtensorMap* tma_k, const CUtensorMap* tma_v, CUtensorMap* tma_o) {
+void fwd_attend_ker_dim(int N, const CUtensorMap* tma_q, const CUtensorMap* tma_k, const CUtensorMap* tma_v, CUtensorMap* tma_o, int prefix) {
     extern __shared__ int __shm[]; // this is the CUDA shared memory
     tma_swizzle_allocator al((int*)&__shm[0]);
 
@@ -153,7 +154,7 @@ void fwd_attend_ker_dim(int N, const CUtensorMap* tma_q, const CUtensorMap* tma_
         warpgroup::mma_async_wait();
 
         if (kv_idx == qo_index) {
-            wg_make_causal(att_block, att_block, -INFINITY); 
+            wg_make_causal_w_prefix(att_block, att_block, prefix, -INFINITY);
         }
 
         row_max(max_vec, att_block, max_vec); // accumulate onto the max_vec
